@@ -28,17 +28,23 @@ device = "cpu"
 model_name = 'prajjwal1/bert-tiny'
 model_pt_path = 'model/tinybert_imdb_230105.pth'
 
+### Loading Model and Tokenizer
+model = AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
+state_dict = torch.load(model_pt_path, map_location=device)
+model.load_state_dict(state_dict)
+model.to(device)
+model.eval()
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
 
 @application.route('/predict', methods=['POST'])
-def predict(model, tokenizer):
+def predict():
     # Read inputs/classes or Return reason of abort
     if 'inputs' in request.json:
         texts = request.json['inputs']
     else:
         abort(Response('Json not understandable, make sure that you have "inputs" key.'))
-    print(texts)
-    print(type(texts))
-    
+        
     ### Preprocessing
     # Tokenization (code was designed for batch inference, but in real case we have only 1 text in texts list)
     inputs_mask = [] 
@@ -60,23 +66,13 @@ def predict(model, tokenizer):
     padded_tensors = torch.LongTensor(np.array([padded_text_ids, padded_inputs_mask]))
     
     ### Prediction
-    model.eval()
     text_ids, inputs_mask = padded_tensors
     outputs = model(text_ids.to(device), inputs_mask.to(device))
     predictions = np.argmax(outputs.logits.detach().cpu().numpy(), axis=-1)
-    
     predictions = [classes[pred] for pred in predictions]
     return jsonify({'predictions': predictions}), 201
 
 
-
 if __name__ == '__main__':
-    ### Loading Model and Tokenizer
-    model = AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
-    state_dict = torch.load(model_pt_path, map_location=device)
-    model.load_state_dict(state_dict)
-    model.to(device)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    
     application.run(host='0.0.0.0', port=8080)
     
